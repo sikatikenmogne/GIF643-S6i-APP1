@@ -6,10 +6,11 @@
 namespace {
     int somme_;     // Contiendra la somme (devrait être 50005000).
 }
-
+std::mutex mutex;
 void accum(int d, int f)
 {
     // Ajoute les nombres de d à f (inclusivement) à la variable somme_.
+    std::lock_guard<std::mutex> lock_guard(mutex);
     for (int i = d; i <= f; ++i) {
         somme_ += i;
     }
