@@ -29,7 +29,7 @@ void prod()
     {
         int r = rand() % 1001 + 1000;
         add_to_queue(r);
-        notification.notify_one();
+        notif.notify_one();
 
         // Bloque le fil pour 50 ms:
         std::this_thread::sleep_for(std::chrono::milliseconds(1000));
