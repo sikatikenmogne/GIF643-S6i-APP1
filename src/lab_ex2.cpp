@@ -8,7 +8,7 @@
 namespace {
     std::queue<int> queue_;
     std::mutex      mutex_;
-    std::condition_variable notification;
+    std::condition_variable notif;
 }
 
 void add_to_queue(int v)
@@ -46,7 +46,7 @@ void cons()
         // On doit toujours vérifier si un objet std::queue n'est pas vide
         // avant de retirer un élément.
 
-        notification.wait(lock, []{
+        notif.wait(lock, []{
             return !queue_.empty();
         });
 
