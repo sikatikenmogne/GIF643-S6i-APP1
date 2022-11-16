@@ -12,12 +12,18 @@
 #include <string>
 #include <cstring>
 #include <thread>
+#include <mutex>
+#include <condition_variable>
 
 namespace gif643 {
 
 const size_t    BPP         = 4;    // Bytes per pixel
 const float     ORG_WIDTH   = 48.0; // Original SVG image width in px.
-const int       NUM_THREADS = 1;    // Default value, changed by argv. 
+const int       NUM_THREADS = 48;    // Default value, changed by argv. 
+
+std::condition_variable condi_;
+
+    std::mutex      mutex_;
 
 using PNGDataVec = std::vector<char>;
 using PNGDataPtr = std::shared_ptr<PNGDataVec>;
@@ -118,7 +124,8 @@ public:
         task_def_(task_def)
     {
     }
-
+        PNGDataPtr data;
+    
     void operator()()
     {
         const std::string&  fname_in    = task_def_.fname_in;
@@ -128,6 +135,7 @@ public:
         const size_t        stride      = width * BPP;
         const size_t        image_size  = height * stride;
         const float&        scale       = float(width) / ORG_WIDTH;
+
 
         std::cerr << "Running for "
                   << fname_in 
@@ -164,7 +172,7 @@ public:
 
             // Write it out ...
             std::ofstream file_out(fname_out, std::ofstream::binary);
-            auto data = writer.getData();
+            data = writer.getData();
             file_out.write(&(data->front()), data->size());
             
         } catch (std::runtime_error e) {
@@ -216,6 +224,8 @@ private:
                                 // threads.
 
     std::vector<std::thread> queue_threads_;
+
+    std::mutex      mutex_;
 
 public:
     /// \brief Default constructor.
@@ -311,6 +321,7 @@ public:
         TaskDef def;
         if (parse(line_org, def)) {
             std::cerr << "Queueing task '" << line_org << "'." << std::endl;
+            std::lock_guard<std::mutex> lock(mutex_);
             task_queue_.push(def);
         }
     }
@@ -318,6 +329,7 @@ public:
     /// \brief Returns if the internal queue is empty (true) or not.
     bool queueEmpty()
     {
+        std::lock_guard<std::mutex> lock(mutex_);
         return task_queue_.empty();
     }
 
@@ -331,7 +343,9 @@ private:
                 task_queue_.pop();
                 TaskRunner runner(task_def);
                 runner();
-            }
+                
+            }else
+                condi_.notify_one();
         }
     }
 };
@@ -343,12 +357,17 @@ int main(int argc, char** argv)
     using namespace gif643;
 
     std::ifstream file_in;
+    int n_threads = NUM_THREADS;
 
     if (argc >= 2 && (strcmp(argv[1], "-") != 0)) {
         file_in.open(argv[1]);
         if (file_in.is_open()) {
             std::cin.rdbuf(file_in.rdbuf());
             std::cerr << "Using " << argv[1] << "..." << std::endl;
+         
+            if(argc == 3){
+                n_threads = std::atoi(argv[2]);
+            }
         } else {
             std::cerr   << "Error: Cannot open '"
                         << argv[1] 
@@ -360,7 +379,7 @@ int main(int argc, char** argv)
     }
 
     // TODO: change the number of threads from args.
-    Processor proc;
+    Processor proc(n_threads);
     
     while (!std::cin.eof()) {
 
@@ -377,5 +396,7 @@ int main(int argc, char** argv)
     }
 
     // Wait until the processor queue's has tasks to do.
-    while (!proc.queueEmpty()) {};
+    std::unique_lock<std::mutex> lock(mutex_);
+    condi_.wait(lock);
+    return 0;
 }
