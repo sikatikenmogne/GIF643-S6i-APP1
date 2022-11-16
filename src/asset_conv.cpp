@@ -22,7 +22,7 @@ namespace gif643 {
 const size_t    BPP         = 4;    // Bytes per pixel
 const float     ORG_WIDTH   = 48.0; // Original SVG image width in px.
 const int       NUM_THREADS = 48;    // Default value, changed by argv. 
-const std::string       OUTPUT_LOG = "log.txt";
+const std::string       OUTPUT_LOG = "../src/log.txt";
     
 std::ofstream   file_out;
 std::mutex      mutex_;
