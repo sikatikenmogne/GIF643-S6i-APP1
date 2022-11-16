@@ -15,15 +15,17 @@
 #include <mutex>
 #include <condition_variable>
 
+std::condition_variable condi_;
+
 namespace gif643 {
 
 const size_t    BPP         = 4;    // Bytes per pixel
 const float     ORG_WIDTH   = 48.0; // Original SVG image width in px.
 const int       NUM_THREADS = 48;    // Default value, changed by argv. 
-
-std::condition_variable condi_;
-
-    std::mutex      mutex_;
+const std::string       OUTPUT_LOG = "log.txt";
+    
+std::ofstream   file_out;
+std::mutex      mutex_;
 
 using PNGDataVec = std::vector<char>;
 using PNGDataPtr = std::shared_ptr<PNGDataVec>;
@@ -118,14 +120,11 @@ class TaskRunner
 {
 private:
     TaskDef task_def_;
-
+    PNGDataPtr data;
 public:
     TaskRunner(const TaskDef& task_def):
         task_def_(task_def)
-    {
-    }
-        PNGDataPtr data;
-    
+    {}
     void operator()()
     {
         const std::string&  fname_in    = task_def_.fname_in;
@@ -187,12 +186,20 @@ public:
         nsvgDelete(image_in);
         nsvgDeleteRasterizer(rast);
 
-        std::cerr << std::endl 
-                  << "Done for "
-                  << fname_in 
-                  << "." 
-                  << std::endl;
+        std::string tmp = "Done for "+ fname_in + ".\n";
+
+
+        std::cerr << tmp;
+        if(file_out.is_open()){
+            file_out.write(tmp.c_str(),tmp.size());
+        
+        }
     }
+
+    PNGDataPtr getData(){
+        return data;
+    }
+
 };
 
 /// \brief A class that organizes the processing of SVG assets in PNG files.
@@ -319,10 +326,13 @@ public:
     {
         std::queue<TaskDef> queue;
         TaskDef def;
-        if (parse(line_org, def)) {
-            std::cerr << "Queueing task '" << line_org << "'." << std::endl;
-            std::lock_guard<std::mutex> lock(mutex_);
-            task_queue_.push(def);
+        if (parse(line_org, def) ){
+            if(png_cache_.find(line_org) == png_cache_.end()){
+                std::cerr << "Queueing task '" << line_org << "'." << std::endl;
+                std::lock_guard<std::mutex> lock(mutex_);
+                task_queue_.push(def);    
+            }else
+                std::cerr<<"Erreur : "<< line_org <<std::endl;
         }
     }
 
@@ -338,12 +348,18 @@ private:
     void processQueue()
     {
         while (should_run_) {
+            std::lock_guard<std::mutex> lock(mutex_);
             if (!task_queue_.empty()) {
                 TaskDef task_def = task_queue_.front();
                 task_queue_.pop();
+
+                std::string str = task_def.fname_in + ";" + task_def.fname_out +";" + std::to_string(task_def.size);
+                
                 TaskRunner runner(task_def);
                 runner();
-                
+                png_cache_.insert({str,runner.getData()});
+                std::cerr <<" --- "<< png_cache_.size() <<" ---- "<< str <<std::endl;
+
             }else
                 condi_.notify_one();
         }
@@ -378,6 +394,7 @@ int main(int argc, char** argv)
         std::cerr << "Using stdin (press CTRL-D for EOF)." << std::endl;
     }
 
+    file_out.open(OUTPUT_LOG, std::ofstream::out);
     // TODO: change the number of threads from args.
     Processor proc(n_threads);
     
@@ -395,8 +412,9 @@ int main(int argc, char** argv)
         file_in.close();
     }
 
+    file_out.close();
     // Wait until the processor queue's has tasks to do.
     std::unique_lock<std::mutex> lock(mutex_);
-    condi_.wait(lock);
+    condi_.wait(lock,[&]{return proc.queueEmpty();});
     return 0;
 }

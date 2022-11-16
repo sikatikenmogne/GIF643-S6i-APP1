@@ -7,7 +7,7 @@
             "type": "cppdbg",
             "request": "launch",
             "program": "${workspaceFolder}/build/asset_conv",
-            "args": ["liste_taches.txt","8"],
+            "args": ["liste_taches.csv","48"],
             "stopAtEntry": false,
             "cwd": "${workspaceFolder}/build/",
             "environment": [],
