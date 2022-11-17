@@ -2,5 +2,6 @@
 *.png
 build*
 data*
+src/log.txt
 .DS_Store
 __pycache__
