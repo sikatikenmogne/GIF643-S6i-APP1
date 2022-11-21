@@ -5,3 +5,4 @@ data*
 src/log.txt
 .DS_Store
 __pycache__
+*.exe
